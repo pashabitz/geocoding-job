@@ -6,9 +6,14 @@ Install dependencies:
 npm install
 ```
 
-Run the service
+Run the API service
 ```
 npm run dev
+```
+
+Run the job processor
+```
+npx tsx jobs/worker.ts
 ```
 
 To test from the command line, use the script /test/jobs.ts e.g.

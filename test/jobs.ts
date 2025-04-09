@@ -32,5 +32,21 @@ program
             console.error(`Failed to submit job:`, error.message);
         }
     });
+program
+    .command("get-job <jobId>")
+    .description("Get job status")
+    .action(async (jobId) => {
+        try {
+            const response = await fetch(`${BASE_URL}/jobs/${jobId}`);
+            const data = await response.json();
+            if (response.status !== 200) {
+                console.error(`Error:`, data);
+            } else {
+                console.log(`Job status:`, data);
+            }
+        } catch (error: any) {
+            console.error(`Failed to get job status:`, error.message);
+        }
+    });
 
 program.parse();
