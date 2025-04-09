@@ -23,7 +23,11 @@ program
             
             const data = await response.json();
             
-            console.log(`Job submitted successfully. Response:`, data);
+            if (response.status !== 200) {
+                console.error(`Error submitting job:`, data);
+            } else {
+                console.log(`Job submitted successfully. Response:`, data);
+            }
         } catch (error: any) {
             console.error(`Failed to submit job:`, error.message);
         }
