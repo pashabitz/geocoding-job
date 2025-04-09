@@ -44,17 +44,28 @@ async function processOneJob(jobId: number) {
         await updateJobStatus(jobId, "completed");
         return;
     }
+    await updateJobStatus(jobId, "processing");
     for (const jobItem of jobItems) {
-        const { lat, long } = await geocodeOneItem(jobItem);
-        await db.update(jobItemsTable)
-            .set({ 
-                status: "completed", 
-                lat: lat.toString(), 
-                long: long.toString(),
-                processedAt: new Date(),
-            })
-            .where(eq(jobItemsTable.id, jobItem.id));
-        console.log(`Processed job item ${jobItem.id}`);
+        try {
+            const { lat, long } = await geocodeOneItem(jobItem);
+            await db.update(jobItemsTable)
+                .set({ 
+                    status: "completed", 
+                    lat: lat.toString(), 
+                    long: long.toString(),
+                    processedAt: new Date(),
+                })
+                .where(eq(jobItemsTable.id, jobItem.id));
+        } catch (error: any) {
+            console.error(`Error processing job item ${jobItem.id}:`, error);
+            await db.update(jobItemsTable)
+                .set({ 
+                    status: "completed", 
+                    error: "message" in error ? error.message : "Error while processing item",
+                    processedAt: new Date(),
+                })
+                .where(eq(jobItemsTable.id, jobItem.id));
+        }
     }
     await updateJobStatus(jobId, "completed");
 }
