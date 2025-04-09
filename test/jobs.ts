@@ -2,7 +2,7 @@ import { program } from "commander";
 const fs = require('fs');
 const path = require('path');
 
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = 'http://localhost:3000/api';
 
 program
     .command("submit <filename>")

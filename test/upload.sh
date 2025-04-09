@@ -12,6 +12,6 @@ if [ ! -f "$filename" ]; then
     exit 1
 fi
 
-curl -X POST http://localhost:3001/api/jobs \
+curl -X POST http://localhost:3000/api/jobs \
     -F "file=@$filename" \
     -F "has_header=true"

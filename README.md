@@ -20,6 +20,7 @@ To test from the command line, use the script /test/jobs.ts e.g.
 ```
 npx tsx test/jobs.ts help
 ```
+**Note**: if the API service is not listening on port 3000 - update the BASE_URL at the top of jobs.ts
 
 ## Necessary Configuration
 ```
