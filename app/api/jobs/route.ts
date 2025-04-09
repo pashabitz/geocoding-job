@@ -74,7 +74,6 @@ export async function POST(req: NextRequest) {
             hasHeader,
             storageKey: key,
         }, hasHeader ? lines.slice(1) : lines);
-        // TODO delete s3 object if write into database fails
 
         return NextResponse.json({
             message: "File received successfully",
@@ -90,9 +89,8 @@ export async function POST(req: NextRequest) {
         const statusCode = error instanceof HttpError ? error.statusCode : 500;
         const message = error instanceof Error ? error.message : "Failed to process request";
 
-        return new Response(JSON.stringify({ error: message }), {
-            status: statusCode,
-            headers: { 'Content-Type': 'application/json' }
+        return NextResponse.json({ error: message }, {
+            status: statusCode
         });
     }
 }

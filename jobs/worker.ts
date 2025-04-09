@@ -1,11 +1,9 @@
-import { connect } from "@/db/lib";
-import { jobItemsTable, jobsTable, jobStatusEnum } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { getPendingJobItems, getPendingJobs, markJobItemAsCompleted, updateJobStatus } from "@/db/lib";
+import { jobItemsTable } from "@/db/schema";
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const db = connect();
 let isRunning = true;
 
 function handleShutdown() {
@@ -25,20 +23,9 @@ async function geocodeOneItem(item: JobItem) {
     return { lat: 0, long: 0 };
 }
 
-type JobStatus = typeof jobsTable.$inferSelect["status"];
-async function updateJobStatus(jobId: number, status: JobStatus) {
-    await db.update(jobsTable)
-        .set({ status })
-        .where(eq(jobsTable.id, jobId));
-}
 
 async function processOneJob(jobId: number) {
-    const jobItems = await db.select()
-        .from(jobItemsTable)
-        .where(and(
-            eq(jobItemsTable.jobId, jobId),
-            eq(jobItemsTable.status, "pending")
-        ));
+    const jobItems = await getPendingJobItems(jobId);
     if (jobItems.length === 0) {
         console.log(`No pending job items found for job ID ${jobId}`);
         await updateJobStatus(jobId, "completed");
@@ -48,31 +35,16 @@ async function processOneJob(jobId: number) {
     for (const jobItem of jobItems) {
         try {
             const { lat, long } = await geocodeOneItem(jobItem);
-            await db.update(jobItemsTable)
-                .set({ 
-                    status: "completed", 
-                    lat: lat.toString(), 
-                    long: long.toString(),
-                    processedAt: new Date(),
-                })
-                .where(eq(jobItemsTable.id, jobItem.id));
+            await markJobItemAsCompleted(jobItem.id, { lat: lat.toString(), long: long.toString() });
         } catch (error: any) {
             console.error(`Error processing job item ${jobItem.id}:`, error);
-            await db.update(jobItemsTable)
-                .set({ 
-                    status: "completed", 
-                    error: "message" in error ? error.message : "Error while processing item",
-                    processedAt: new Date(),
-                })
-                .where(eq(jobItemsTable.id, jobItem.id));
+            await markJobItemAsCompleted(jobItem.id, { error: error.message });
         }
     }
     await updateJobStatus(jobId, "completed");
 }
 async function processJobs() {
-    const pendingJobs = await db.select()
-        .from(jobsTable)
-        .where(eq(jobsTable.status, "pending"));
+    const pendingJobs = await getPendingJobs();
     if (pendingJobs.length === 0) {
         return;
     }
@@ -95,8 +67,6 @@ async function startWorker() {
       await sleep(1000);
     }
   }
-  
-  console.log('Worker stopped');
 }
 
 startWorker().catch(error => {
