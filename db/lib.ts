@@ -24,3 +24,30 @@ export const getJobItems = async (jobId: number, itemsToFetch: number, offset: n
         )
         .limit(itemsToFetch);
 }
+
+export const findJobByChecksum = async (checksum: string, fileSize: number, dataRowsCount: number) => {
+    const db = connect();
+    return await db.select()
+        .from(jobsTable)
+        .where(and(
+            eq(jobsTable.checksum, checksum),
+            eq(jobsTable.fileSize, fileSize),
+            eq(jobsTable.dataRows, dataRowsCount)
+        ));
+}
+type JobData = typeof jobsTable.$inferInsert;
+export const logJob = async (job: JobData, dataLines: string[]) => {
+    const db = connect();
+    const id = await db.transaction(async (tx) => {
+        const inserted = await tx.insert(jobsTable).values(job).returning();
+        const id = inserted[0].id;
+        const jobItems = dataLines.map((line, index) => ({
+            jobId: id,
+            rowNumber: index + 1,
+            data: line,
+        }));
+        await tx.insert(jobItemsTable).values(jobItems);
+        return id;
+    });
+    return id;
+}

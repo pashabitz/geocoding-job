@@ -7,7 +7,8 @@ const BASE_URL = 'http://localhost:3001/api';
 program
     .command("submit <filename>")
     .description("Submit a job")
-    .action(async (filename) => {
+    .option("--hasHeader", "Indicates if the file has a header row")
+    .action(async (filename, options) => {
         try {
             const filePath = path.resolve(filename);
             const fileContent = fs.readFileSync(filePath);
@@ -15,6 +16,9 @@ program
             const formData = new FormData();
             const blob = new Blob([fileContent], { type: 'application/octet-stream' });
             formData.append('file', blob, path.basename(filename));
+            if (options.hasHeader) {
+                formData.append('has_header', 'true');
+            }
             
             const response = await fetch(`${BASE_URL}/jobs`, {
                 method: 'POST',

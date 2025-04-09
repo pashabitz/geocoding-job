@@ -1,8 +1,6 @@
-import { connect } from "@/db/lib";
-import { jobItemsTable, jobsTable } from "@/db/schema";
-import { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { findJobByChecksum, logJob } from "@/db/lib";
+import { storeFile } from "@/lib/s3";
+import { NextRequest, NextResponse } from "next/server";
 const crypto = require('crypto');
 
 class HttpError extends Error {
@@ -36,54 +34,9 @@ async function processRequestData(req: NextRequest) {
 }
 
 async function findExistingJob(checksum: string, fileSize: number, dataRowsCount: number) {
-    const db = connect();
-    return await db.select()
-        .from(jobsTable)
-        .where(and(
-            eq(jobsTable.checksum, checksum),
-            eq(jobsTable.fileSize, fileSize),
-            eq(jobsTable.dataRows, dataRowsCount)
-        ));
+    return await findJobByChecksum(checksum, fileSize, dataRowsCount);
 }
 
-async function storeFile(file: File) {
-    const s3 = new S3Client({
-        region: process.env.AWS_REGION,
-        credentials: {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        },
-    });
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const key = new Date().toISOString();
-    const bucket = process.env.AWS_S3_BUCKET_NAME!;
-    const uploadParams = {
-        Bucket: bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: file.type,
-    };
-    console.log(uploadParams);
-    const s3PutOutput = await s3.send(new PutObjectCommand(uploadParams));
-    return { s3PutOutput, key: `s3://${bucket}/${key}` };
-}
-
-type JobData = typeof jobsTable.$inferInsert;
-async function logJob(job: JobData, dataLines: string[]) {
-    const db = connect();
-    const id = await db.transaction(async (tx) => {
-        const inserted = await tx.insert(jobsTable).values(job).returning();
-        const id = inserted[0].id;
-        const jobItems = dataLines.map((line, index) => ({
-            jobId: id,
-            rowNumber: index + 1,
-            data: line,
-        }));
-        await tx.insert(jobItemsTable).values(jobItems);
-        return id;
-    });
-    return id;
-}
 
 export async function POST(req: NextRequest) {
     try {
@@ -102,13 +55,13 @@ export async function POST(req: NextRequest) {
                 console.warn("Multiple jobs found with the same checksum and file size. This should not happen.");
             }
             const existingJob = existingJobs[0];
-            return new Response(JSON.stringify({
-                success: true,
+            return NextResponse.json({
                 message: "File already exists",
-                jobId: existingJob.id
-            }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
+                jobId: existingJob.id,
+                hasHeader: existingJob.hasHeader,
+                fileSize: existingJob.fileSize,
+            }, {
+                status: 200
             });
         }
         const { s3PutOutput, key } = await storeFile(file);
@@ -123,15 +76,13 @@ export async function POST(req: NextRequest) {
         }, hasHeader ? lines.slice(1) : lines);
         // TODO delete s3 object if write into database fails
 
-        return new Response(JSON.stringify({
-            success: true,
+        return NextResponse.json({
             message: "File received successfully",
-            file_size: fileSize,
-            has_header: hasHeader,
+            fileSize,
+            hasHeader,
             jobId
-        }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
+        }, {
+            status: 200
         });
     } catch (error) {
         console.error("Error processing request:", error);
