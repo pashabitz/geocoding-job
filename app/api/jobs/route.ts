@@ -1,5 +1,5 @@
 import { connect } from "@/db/lib";
-import { jobsTable } from "@/db/schema";
+import { jobItemsTable, jobsTable } from "@/db/schema";
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 class HttpError extends Error {
     statusCode: number;
-    
+
     constructor(message: string, statusCode: number = 500) {
         super(message);
         this.statusCode = statusCode;
@@ -28,10 +28,10 @@ async function processRequestData(req: NextRequest) {
     if (!(file instanceof File)) {
         throw new HttpError("File parameter is not a valid file", 400);
     }
-    
+
     const hasHeaderStr = formData.get("has_header");
     const hasHeader = hasHeaderStr ? hasHeaderStr === "true" : false;
-    
+
     return { file, hasHeader };
 }
 
@@ -69,17 +69,26 @@ async function storeFile(file: File) {
 }
 
 type JobData = typeof jobsTable.$inferInsert;
-async function logJob(job: JobData) {
-    console.log(job);
+async function logJob(job: JobData, dataLines: string[]) {
     const db = connect();
-    const inserted = await db.insert(jobsTable).values(job).returning();
-    return inserted[0].id;
+    const id = await db.transaction(async (tx) => {
+        const inserted = await tx.insert(jobsTable).values(job).returning();
+        const id = inserted[0].id;
+        const jobItems = dataLines.map((line, index) => ({
+            jobId: id,
+            rowNumber: index + 1,
+            data: line,
+        }));
+        await tx.insert(jobItemsTable).values(jobItems);
+        return id;
+    });
+    return id;
 }
 
 export async function POST(req: NextRequest) {
     try {
         const { file, hasHeader } = await processRequestData(req);
-        
+
         const buffer = Buffer.from(await file.arrayBuffer());
         const fileSize = buffer.length;
         const contentAsString = buffer.toString();
@@ -93,7 +102,7 @@ export async function POST(req: NextRequest) {
                 console.warn("Multiple jobs found with the same checksum and file size. This should not happen.");
             }
             const existingJob = existingJobs[0];
-            return new Response(JSON.stringify({ 
+            return new Response(JSON.stringify({
                 success: true,
                 message: "File already exists",
                 jobId: existingJob.id
@@ -111,10 +120,10 @@ export async function POST(req: NextRequest) {
             dataRows: dataRowsCount,
             hasHeader,
             storageKey: key,
-        })
+        }, hasHeader ? lines.slice(1) : lines);
         // TODO delete s3 object if write into database fails
 
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
             success: true,
             message: "File received successfully",
             file_size: fileSize,
@@ -126,10 +135,10 @@ export async function POST(req: NextRequest) {
         });
     } catch (error) {
         console.error("Error processing request:", error);
-        
+
         const statusCode = error instanceof HttpError ? error.statusCode : 500;
         const message = error instanceof Error ? error.message : "Failed to process request";
-        
+
         return new Response(JSON.stringify({ error: message }), {
             status: statusCode,
             headers: { 'Content-Type': 'application/json' }
