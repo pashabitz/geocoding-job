@@ -48,5 +48,21 @@ program
             console.error(`Failed to get job status:`, error.message);
         }
     });
+program
+    .command("get-results <jobId>")
+    .description("Get job results")
+    .action(async (jobId) => {
+        try {
+            const response = await fetch(`${BASE_URL}/jobs/${jobId}/results`);
+            const data = await response.json();
+            if (response.status !== 200) {
+                console.error(`Error:`, data);
+            } else {
+                console.log(`Job results:`, data);
+            }
+        } catch (error: any) {
+            console.error(`Failed to get job results:`, error.message);
+        }
+    });
 
 program.parse();
