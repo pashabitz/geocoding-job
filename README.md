@@ -31,3 +31,21 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_S3_BUCKET_NAME=
 ```
+
+## API Structure
+Take a look at `test/jobs.ts` to see the endpoints exercised.
+
+### Submit job
+```
+POST /jobs
+```
+
+### Get Job
+```
+GET /jobs/{jobId}
+```
+
+### Get results
+```
+GET /jobs/{jobId}/results
+```
